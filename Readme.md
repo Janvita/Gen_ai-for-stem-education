@@ -1,41 +1,66 @@
 # Generative AI for STEM Education
-This project is a web application designed for STEM education using Generative AI. It has a Python FastAPI backend and a Vite frontend.
 
-## Project Structure
-
-root/
-├── backend/      # FastAPI backend
-├── app/          # Vite frontend
-├── .venv/        # Python virtual environment
-├── .gitignore
-└── README.md
-
-1. Create virtual environment:
-python3 -m venv .venv
-
-2. Activate it:
-# macOS / Linux
-source .venv/bin/activate
-# Windows
-.venv\Scripts\activate
-
-3. Install dependencies:
-pip install -r backend/requirements.txt
-
-4. Run FastAPI server:
-cd backend
-uvicorn main:app --reload --port 8001
+A comprehensive web application designed to enhance STEM education through the power of Generative AI. This project combines Python FastAPI backend with a modern Vite frontend to deliver an interactive and engaging learning experience.
 
 
-1. Open a new terminal (keep backend running)
-2. Navigate to frontend:
-cd app
-3. Install dependencies:
-npm install
-4. Run frontend:
-npm run dev
+### Backend Setup
 
-## Environmental variables
+1. **Create and activate a Python virtual environment:**
 
-- Backend: backend/.env : Add the groq api key in this file
+   ```bash
+   # Create virtual environment
+   python3 -m venv .venv
+   
+   # Activate virtual environment
+   # For macOS/Linux:
+   source .venv/bin/activate
+   
+   # For Windows:
+   .venv\Scripts\activate
+   ```
+
+2. **Install Python dependencies:**
+
+   ```bash
+   pip install -r backend/requirements.txt
+   ```
+
+3. **Set up environment variables:**
+
+   Create a `.env` file in the `backend/` directory and add your API keys:
+
+   ```env
+   GROQ_API_KEY=your_groq_api_key_here
+   ```
+
+4. **Run the FastAPI backend:**
+
+   ```bash
+   cd backend
+   uvicorn main:app --reload --port 8001
+   ```
+
+   The backend will be available at `http://localhost:8001`
+
+### Frontend Setup
+
+1. **Navigate to the frontend directory:**
+
+   ```bash
+   cd app
+   ```
+
+2. **Install Node.js dependencies:**
+
+   ```bash
+   npm install
+   ```
+
+3. **Run the development server:**
+
+   ```bash
+   npm run dev
+   ```
+
+   The frontend will be available at `http://localhost:5173` 
 
