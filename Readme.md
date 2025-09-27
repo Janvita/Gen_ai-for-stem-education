@@ -1,6 +1,6 @@
 # Generative AI for STEM Education
 
-A comprehensive web application designed to enhance STEM education through the power of Generative AI. This project combines Python FastAPI backend with a modern Vite frontend to deliver an interactive and engaging learning experience.
+A comprehensive web application designed to enhance education through the power of Generative AI. This project combines Python FastAPI backend with Vite frontend to deliver an interactive and learning experience.
 
 
 ### Backend Setup
