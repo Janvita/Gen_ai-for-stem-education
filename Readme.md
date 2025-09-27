@@ -37,7 +37,8 @@ A comprehensive web application designed to enhance STEM education through the p
 
    ```bash
    cd backend
-   uvicorn main:app --reload --port 8001
+   python -m uvicorn main:app --reload --port 8001
+
    ```
 
    The backend will be available at `http://localhost:8001`
