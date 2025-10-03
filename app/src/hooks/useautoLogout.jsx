@@ -1,3 +1,13 @@
+/**
+ * useAutoLogout.js
+ *
+ * This custom React hook automatically logs out a user after a period of inactivity.
+ * - Tracks user activity (mouse movement, clicks, key presses, scrolling).
+ * - Resets the inactivity timer on any interaction.
+ * - Calls the provided handleLogout function if the user is inactive for the specified timeout.
+ * - Also logs out the user when the window is closed or refreshed.
+ */
+
 import { useEffect } from "react";
 
 export default function useAutoLogout(sessionId, handleLogout, timeout) {

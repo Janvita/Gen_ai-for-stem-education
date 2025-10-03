@@ -1,3 +1,12 @@
+/**
+ * ShapeOverlay.jsx
+ *
+ * This component renders an SVG overlay on top of an image to visually highlight
+ * detected circles and text regions. Each shape is clickable, allowing users
+ * to select a shape and view detailed information via a popup.
+ */
+
+
 import React from "react";
 
 function ShapeOverlay({ imageInfo, circles, texts, setSelectedShape }) {

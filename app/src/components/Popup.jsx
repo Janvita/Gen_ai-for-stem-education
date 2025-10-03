@@ -1,3 +1,13 @@
+/**
+ * Popup.jsx
+ *
+ * This component displays a popup box with information about a selected shape (circle or text).
+ * - For circles: shows page number and circle text, with a button to navigate to the corresponding page.
+ * - For text: fetches additional info from the LLM backend and displays it.
+ * - Supports zoomed image coordinates without scaling the popup itself.
+ * - Provides a close button to dismiss the popup.
+ */
+
 
 import { useState, useEffect } from "react";
 

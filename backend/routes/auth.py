@@ -1,11 +1,32 @@
+"""
+auth.py
+
+This module defines authentication routes for handling user login and logout sessions 
+using FastAPI. It manages session creation and termination by storing session details 
+(name, email, session ID, start time, and end time) in a local SQLite database (`sessions.db`). 
+Each session is uniquely identified by a UUID. 
+"""
+
 from fastapi import APIRouter, Form
 from pydantic import BaseModel
 from datetime import datetime
 import sqlite3
 import uuid
 
+# Create a FastAPI router instance for handling authentication routes
 router = APIRouter()
+
+
 def init_db():
+    """
+    Initializes the SQLite database and creates the `sessions` table if it does not already exist.
+    The `sessions` table stores:
+        - id (str): Unique identifier for the session (UUID)
+        - name (str): Name of the user
+        - email (str): Email of the user
+        - start_time (str): ISO formatted string marking when the session started
+        - end_time (str): ISO formatted string marking when the session ended (nullable)
+    """
     conn = sqlite3.connect("sessions.db")
     cursor = conn.cursor()
     cursor.execute("""
@@ -20,13 +41,33 @@ def init_db():
     conn.commit()
     conn.close()
 
+
+# Initialize the database on module load
 init_db()
+
+
 class LogoutRequest(BaseModel):
+    """
+    Request model for logging out a session.
+    Expects:
+        - session_id (str): The unique identifier of the session to be terminated.
+    """
     session_id: str
 
 
 @router.post("/login")
 async def login(name: str = Form(...), email: str = Form(...)):
+    """
+    Handles user login.
+
+    - Accepts user `name` and `email` as form data.
+    - Generates a unique session ID using UUID.
+    - Captures the session's start time in UTC (ISO format).
+    - Stores the session details in the SQLite database (`sessions` table).
+    - Returns the generated session ID and the session start time.
+
+    This function essentially begins a new user session.
+    """
     session_id = str(uuid.uuid4())
     start_time = datetime.utcnow().isoformat()
 
@@ -44,6 +85,16 @@ async def login(name: str = Form(...), email: str = Form(...)):
 
 @router.post("/logout")
 async def logout(request: LogoutRequest):
+    """
+    Handles user logout.
+
+    - Accepts a `LogoutRequest` object containing the session ID.
+    - Records the current UTC time as the session's end time (ISO format).
+    - Updates the corresponding session record in the database by setting its `end_time`.
+    - Returns a confirmation message along with the recorded end time.
+
+    This function effectively ends a user session.
+    """
     end_time = datetime.utcnow().isoformat()
 
     conn = sqlite3.connect("sessions.db")

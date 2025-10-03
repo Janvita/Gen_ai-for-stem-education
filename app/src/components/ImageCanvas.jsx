@@ -1,3 +1,16 @@
+/**
+ * ImageCanvas.jsx
+ *
+ * This component is responsible for:
+ * - Displaying an uploaded image
+ * - Sending the image to a backend for text/shape detection
+ * - Scaling the returned coordinates to match the displayed image
+ * - Rendering overlays for detected circles/texts
+ * - Allowing zoom in/out (via buttons and scroll wheel)
+ * - Showing a popup when a shape is selected
+ */
+
+
 import React, { useRef } from "react";
 import ShapeOverlay from "./ShapeOverlay";
 import Popup from "./Popup";

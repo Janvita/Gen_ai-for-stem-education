@@ -1,15 +1,54 @@
+"""
+detect.py
+
+This module defines image-processing routes and functions for detecting circles and text 
+from uploaded images using OpenCV and EasyOCR. 
+
+Key functionalities:
+- Detect circular regions in an image and extract text inside/near them.
+- Detect textual regions across the entire image (excluding numeric-only text and quotes).
+- Provide a FastAPI endpoint (`POST /`) that accepts an image file and returns 
+  detected circles with text plus extracted non-numeric text regions.
+"""
+
 from fastapi import APIRouter, File, UploadFile
 import cv2
 import numpy as np
 import easyocr
 import re
 
+# Initialize FastAPI router for detection-related endpoints
 router = APIRouter()
+
+# Initialize EasyOCR reader (supports English by default)
 reader = easyocr.Reader(['en'])
 
-reader = easyocr.Reader(['en'])
 
 def detect_circles_with_text_from_image_bytes(image_bytes):
+    """
+    Detects circular shapes in the given image and extracts text within/around each circle.
+
+    Steps:
+    1. Convert image bytes into an OpenCV image.
+    2. Convert to grayscale for circle detection.
+    3. Use Hough Circle Transform to detect circles.
+    4. For each detected circle:
+       - Crop the circular region with some padding.
+       - Perform OCR (EasyOCR) on the cropped region.
+       - Identify possible `page_number` (format: a<digits>.<digits>) and 
+         `circle_text` (purely numeric).
+       - Collect raw texts recognized in that region.
+    5. Return a structured list of circles with metadata.
+
+    Returns:
+        List of dictionaries containing:
+        - id (int): Circle index
+        - x, y (int): Circle center coordinates
+        - r (int): Circle radius
+        - page_number (str): Extracted page number if detected
+        - circle_text (str): Extracted numeric text if detected
+        - raw_texts (list): All OCR results from that circle region
+    """
     try:
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -20,6 +59,7 @@ def detect_circles_with_text_from_image_bytes(image_bytes):
             
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
+        # Detect circles using Hough Circle Transform
         circles = cv2.HoughCircles(
             gray,
             cv2.HOUGH_GRADIENT,
@@ -36,7 +76,7 @@ def detect_circles_with_text_from_image_bytes(image_bytes):
             circles = np.round(circles[0, :]).astype("int")
             
             for i, (x, y, r) in enumerate(circles):
-                # Crop region around circle
+                # Crop region around circle with padding
                 top = max(y - r - 20, 0)
                 bottom = min(y + r + 20, img.shape[0])
                 left = max(x - r - 20, 0)
@@ -50,7 +90,7 @@ def detect_circles_with_text_from_image_bytes(image_bytes):
                     print(f"OCR error for circle {i}: {e}")
                     texts = []
 
-                # Parse into page_number + circle_text
+                # Extract structured info
                 page_number, circle_text = "", ""
                 for t in texts:
                     t_clean = t.strip()
@@ -60,9 +100,6 @@ def detect_circles_with_text_from_image_bytes(image_bytes):
                     
                     elif re.match(r"^\d+$", t_clean):
                         circle_text = t_clean
-
-
-                
 
                 results.append({
                     "id": i + 1,
@@ -81,8 +118,25 @@ def detect_circles_with_text_from_image_bytes(image_bytes):
         return []
 
 
-
 def detect_text_from_image_bytes(image_bytes):
+    """
+    Detects text regions from the entire image, excluding numeric-only text and 
+    strings with quotes.
+
+    Steps:
+    1. Convert image bytes to an OpenCV image.
+    2. Run EasyOCR to detect text with bounding boxes.
+    3. Skip text if it:
+        - Contains quotes (single/double).
+        - Contains any digits.
+    4. Collect bounding box coordinates and the cleaned text.
+
+    Returns:
+        List of dictionaries containing:
+        - id (int): Text index
+        - x1, y1, x2, y2 (int): Bounding box coordinates
+        - text (str): Extracted text string
+    """
     try:
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -95,6 +149,7 @@ def detect_text_from_image_bytes(image_bytes):
         text_boxes = []
 
         for i, (bbox, text, confidence) in enumerate(results):
+            # Skip text containing quotes or numbers
             if "'" in text or '"' in text:
                 continue 
 
@@ -102,23 +157,24 @@ def detect_text_from_image_bytes(image_bytes):
                 continue
          
             try:
-                    x_coords = [point[0] for point in bbox]
-                    y_coords = [point[1] for point in bbox]
-                    
-                    x1, x2 = int(min(x_coords)), int(max(x_coords))
-                    y1, y2 = int(min(y_coords)), int(max(y_coords))
+                # Extract bounding box coordinates
+                x_coords = [point[0] for point in bbox]
+                y_coords = [point[1] for point in bbox]
+                
+                x1, x2 = int(min(x_coords)), int(max(x_coords))
+                y1, y2 = int(min(y_coords)), int(max(y_coords))
 
-                    text_boxes.append({
-                        "id": i + 1,
-                        "x1": x1,
-                        "y1": y1,
-                        "x2": x2,
-                        "y2": y2,
-                        "text": text.strip()
-                    })
+                text_boxes.append({
+                    "id": i + 1,
+                    "x1": x1,
+                    "y1": y1,
+                    "x2": x2,
+                    "y2": y2,
+                    "text": text.strip()
+                })
             except Exception as e:
-                    print(f"Error processing text box {i}: {e}")
-                    continue
+                print(f"Error processing text box {i}: {e}")
+                continue
 
         return text_boxes
     
@@ -129,6 +185,18 @@ def detect_text_from_image_bytes(image_bytes):
 
 @router.post("/")
 async def detect_circles(file: UploadFile = File(...)):
+    """
+    FastAPI endpoint to detect circles and text from an uploaded image.
+
+    Steps:
+    1. Accepts an image file via POST request.
+    2. Reads image bytes.
+    3. Runs circle detection (with OCR inside circles).
+    4. Runs general text detection across the entire image.
+    5. Returns results as a JSON response containing:
+        - circles: List of detected circles with text info
+        - texts: List of detected text regions outside circles
+    """
     try:
         image_bytes = await file.read()    
         circles_with_text = detect_circles_with_text_from_image_bytes(image_bytes)

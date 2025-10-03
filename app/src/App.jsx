@@ -2,7 +2,6 @@ import { useState, useRef } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import ImageUploader from "./components/ImageUploader";
 import ImageCanvas from "./components/ImageCanvas";
-import Popup from "./components/Popup";
 import LoginForm from "./components/Loginform";
 import Page from "./components/Page";
 import useLogout from "./hooks/useLogout";
@@ -29,7 +28,7 @@ function MainPage() {
   const handleLogout = useLogout(sessionId, setUser, setSessionId, setImageUrl);
 
   // Auto logout (inactivity + tab close)
-  useautoLogout(sessionId, handleLogout,  60 * 1000);
+  useautoLogout(sessionId, handleLogout,  10 * 1000);
 
   return (
     <div className="container">

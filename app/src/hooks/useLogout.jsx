@@ -1,3 +1,13 @@
+/**
+ * useLogout.js
+ *
+ * This custom React hook returns a memoized logout function.
+ * - Sends a logout request to the backend API with the current session ID.
+ * - Clears user-related state (user info, session ID, and uploaded image) on logout.
+ * - Ensures the function reference is stable with useCallback for performance.
+ */
+
+
 import { useCallback } from "react";
 
 export default function useLogout(sessionId, setUser, setSessionId, setImageUrl) {
