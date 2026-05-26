@@ -52,13 +52,13 @@ def get_paddle_ocr():
             
             from paddleocr import PaddleOCR
             _PADDLE_OCR = PaddleOCR(
-                use_gpu=use_gpu,
+                device = "gpu" if use_gpu else "cpu",
                 use_textline_orientation=True,
                 lang="en",
                 ocr_version="PP-OCRv4",
                 use_doc_orientation_classify=False,
                 use_doc_unwarping=False,
-                show_log=False,
+                
             )
             print(f"[construction_ocr] PaddleOCR ready ({'GPU' if use_gpu else 'CPU'})")
         except Exception as _e:
