@@ -10,6 +10,7 @@ from typing import Optional
 from fastapi import APIRouter, File, UploadFile, Form
 from fastapi.responses import StreamingResponse, JSONResponse
 from langchain_core.messages import AIMessageChunk, AIMessage, ToolMessage
+from cachetools import LRUCache
 
 from services.agent_service import llm, memory, SYSTEM_PROMPT
 from services.agent_tools import get_agent_tools
@@ -22,8 +23,10 @@ from PIL import Image
 
 router = APIRouter()
 
-# In-memory cache for global VLM context keyed by page_session_id
-_global_context_cache: dict[str, str] = {}
+# Bounded LRU cache for VLM context; oldest session evicted when limit is reached.
+_global_context_cache: LRUCache = LRUCache(maxsize=50)
+
+_MAX_MEMORY_THREADS = 50
 
 @router.post("/context")
 async def build_context(
@@ -70,6 +73,11 @@ async def build_context(
             _global_context_cache[page_session_id] += f"\n\n{section}"
         else:
             _global_context_cache[page_session_id] = section
+
+        # Evict the oldest LangGraph memory thread when the cap is exceeded.
+        if len(memory.storage) > _MAX_MEMORY_THREADS:
+            oldest_key = next(iter(memory.storage))
+            memory.storage.pop(oldest_key, None)
 
         return JSONResponse({"status": "ok", "analysis": vlm_res.get("analysis", vlm_res)})
     except Exception as e:
@@ -140,8 +148,8 @@ async def chat_endpoint(
                                     data = json.loads(msg.content)
                                     if data.get("__agent_draw_action__"):
                                         yield f"data: {json.dumps({'type': 'draw_shapes', 'data': data})}\n\n"
-                                except:
-                                    pass
+                                except Exception as e:
+                                    print(f"[chat] Failed to parse highlight_shapes_on_canvas result: {e}")
                             payload = {"type": "tool_end", "name": msg.name}
                             yield f"data: {json.dumps(payload)}\n\n"
 

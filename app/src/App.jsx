@@ -91,15 +91,17 @@ function MainPage() {
     contextBuiltForRef.current = pageSessionId;
     setGlobalContextStatus("loading");
 
+    const controller = new AbortController();
+
     const buildContext = async () => {
       try {
-        const blob = await fetch(imageUrl).then(r => r.blob());
+        const blob = await fetch(imageUrl, { signal: controller.signal }).then(r => r.blob());
         const formData = new FormData();
         formData.append("file", blob, "image.png");
         formData.append("page_session_id", pageSessionId);
         formData.append("page_label", "Main Drawing");
 
-        const res = await fetch(`${API_BASE_URL}/chat/context`, { method: "POST", body: formData });
+        const res = await fetch(`${API_BASE_URL}/chat/context`, { method: "POST", body: formData, signal: controller.signal });
         if (res.ok) {
           const data = await res.json();
           setGlobalContextStatus("ready");
@@ -114,40 +116,49 @@ function MainPage() {
           setGlobalContextStatus("error");
         }
       } catch (err) {
+        if (err.name === "AbortError") return;
         setGlobalContextStatus("error");
         console.error("[Agent] Global context error:", err);
       }
     };
     buildContext();
+    return () => controller.abort();
   }, [pageSessionId]);
 
   // Append VLM context for each newly visited page into the same session
+  const pageContextControllersRef = useRef({});
   useEffect(() => {
     for (const [key, page] of Object.entries(views.pages)) {
       if (page.imageUrl && !contextBuiltPagesRef.current.has(key)) {
         contextBuiltPagesRef.current.add(key);
+        const controller = new AbortController();
+        pageContextControllersRef.current[key] = controller;
         const buildPageContext = async () => {
           try {
             const formData = new FormData();
             formData.append("page_session_id", pageSessionId);
             formData.append("page_label", page.pageLabel || key);
-            // Server-hosted pages: pass path so backend reads from disk (no upload)
             if (!page.imageUrl.startsWith("blob:")) {
               const pathname = page.imageUrl.startsWith("/") ? page.imageUrl : new URL(page.imageUrl).pathname;
               formData.append("server_image_path", pathname);
             } else {
-              const blob = await fetch(page.imageUrl).then(r => r.blob());
+              const blob = await fetch(page.imageUrl, { signal: controller.signal }).then(r => r.blob());
               formData.append("file", blob, "image.png");
             }
-            await fetch(`${API_BASE_URL}/chat/context`, { method: "POST", body: formData });
+            await fetch(`${API_BASE_URL}/chat/context`, { method: "POST", body: formData, signal: controller.signal });
             console.log(`[Agent] Context appended for page: ${key}`);
           } catch (err) {
+            if (err.name === "AbortError") return;
             console.error(`[Agent] Failed to build context for page ${key}:`, err);
           }
         };
         buildPageContext();
       }
     }
+    return () => {
+      Object.values(pageContextControllersRef.current).forEach(c => c.abort());
+      pageContextControllersRef.current = {};
+    };
   }, [views.pages, pageSessionId]);
 
   // Auto-detect circles on newly visited pages once imageInfo is available

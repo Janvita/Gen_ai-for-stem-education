@@ -8,8 +8,10 @@ Cache key: "{page_session_id}:{page_label}"
 from __future__ import annotations
 
 import os
+from cachetools import LRUCache
 
-_cache: dict[str, bytes] = {}
+# Max 20 entries; large construction drawings can be several MB each.
+_cache: LRUCache = LRUCache(maxsize=20)
 
 # Resolve the images directory served at /images/
 # __file__ is backend/services/image_cache.py → three dirname calls reach the project root
