@@ -1,15 +1,10 @@
-/**
- * LoginForm.jsx
- *
- * This component renders a login form where a user enters their name and email.
- * - On submit, it sends the credentials to the backend login API.
- * - If successful, it stores the user info and session ID in the parent state.
- * - Handles loading state and displays error messages if login fails.
- */
+// LoginForm — login form with name/email, creates a backend session
 
 
 import { useState } from "react";
 import "../styles/LoginForm.css";
+import { logActivity } from "../utils/activityLogger";
+import { API_BASE_URL } from "../config";
 
 function LoginForm({ setUser, setSessionId }) {
   const [name, setName] = useState("");
@@ -23,7 +18,7 @@ function LoginForm({ setUser, setSessionId }) {
     setError("");
 
     try {
-      const response = await fetch("http://localhost:8001/auth/login", {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: "POST",
         body: new URLSearchParams({ name, email }),
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -32,8 +27,21 @@ function LoginForm({ setUser, setSessionId }) {
       const data = await response.json();
 
       if (response.ok && data.session_id) {
+        // Save to React state
         setUser({ name, email });
         setSessionId(data.session_id);
+
+        // Save to browser session storage to survive reloads
+        sessionStorage.setItem("drawingAppUser", JSON.stringify({ name, email }));
+        sessionStorage.setItem("drawingAppSessionId", data.session_id);
+
+        // Log a successful login associated with the newly created session
+        logActivity({
+          sessionId: data.session_id,
+          eventType: "login_success",
+          eventData: { name, email },
+          user: { name, email },
+        });
       } else {
         setError(data.message || "Login failed. Please try again.");
       }
@@ -47,7 +55,10 @@ function LoginForm({ setUser, setSessionId }) {
 
   return (
     <div className="login-container">
-      <h2>Login</h2>
+      <div className="login-header">
+        <h2>Login to Main Space</h2>
+        <p>Sign in to start your session</p>
+      </div>
       <form onSubmit={handleSubmit} className="login-form">
         <input
           type="text"
@@ -65,9 +76,23 @@ function LoginForm({ setUser, setSessionId }) {
           required
           disabled={loading}
         />
-        {error && <div className="error-message" style={{color: 'red', margin: '10px 0'}}>{error}</div>}
+        {error && (
+          <div
+            className="error-message"
+            style={{
+              color: '#fca5a5',
+              margin: '0',
+              fontSize: '0.9rem',
+              background: 'rgba(185, 28, 28, 0.2)',
+              padding: '8px',
+              borderRadius: '4px'
+            }}
+          >
+            {error}
+          </div>
+        )}
         <button type="submit" disabled={loading}>
-          {loading ? "Logging in..." : "Login"}
+          {loading ? "Logging in..." : "Start Learning"}
         </button>
       </form>
     </div>

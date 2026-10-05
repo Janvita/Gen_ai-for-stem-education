@@ -1,209 +1,74 @@
 """
 detect.py
 
-This module defines image-processing routes and functions for detecting circles and text 
-from uploaded images using OpenCV and EasyOCR. 
-
-Key functionalities:
-- Detect circular regions in an image and extract text inside/near them.
-- Detect textual regions across the entire image (excluding numeric-only text and quotes).
-- Provide a FastAPI endpoint (`POST /`) that accepts an image file and returns 
-  detected circles with text plus extracted non-numeric text regions.
+OCR & Circle Detection route. Uses packaged:
+- construction_circle_detector
+- construction_ocr
 """
 
-from fastapi import APIRouter, File, UploadFile
-import cv2
-import numpy as np
-import easyocr
-import re
+import asyncio
+from typing import Optional
+from fastapi import APIRouter, File, UploadFile, Form
+from construction_circle_detector import detect_circles_from_bytes
+from construction_ocr.pipeline import detect_text_from_bytes
+from services.image_cache import store as img_store, get as img_get, cache_key, resolve_server_path
 
-# Initialize FastAPI router for detection-related endpoints
 router = APIRouter()
 
-# Initialize EasyOCR reader (supports English by default)
-reader = easyocr.Reader(['en'])
-
-
-def detect_circles_with_text_from_image_bytes(image_bytes):
-    """
-    Detects circular shapes in the given image and extracts text within/around each circle.
-
-    Steps:
-    1. Convert image bytes into an OpenCV image.
-    2. Convert to grayscale for circle detection.
-    3. Use Hough Circle Transform to detect circles.
-    4. For each detected circle:
-       - Crop the circular region with some padding.
-       - Perform OCR (EasyOCR) on the cropped region.
-       - Identify possible `page_number` (format: a<digits>.<digits>) and 
-         `circle_text` (purely numeric).
-       - Collect raw texts recognized in that region.
-    5. Return a structured list of circles with metadata.
-
-    Returns:
-        List of dictionaries containing:
-        - id (int): Circle index
-        - x, y (int): Circle center coordinates
-        - r (int): Circle radius
-        - page_number (str): Extracted page number if detected
-        - circle_text (str): Extracted numeric text if detected
-        - raw_texts (list): All OCR results from that circle region
-    """
-    try:
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        if img is None:
-            print("Failed to decode image")
-            return []
-            
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-        # Detect circles using Hough Circle Transform
-        circles = cv2.HoughCircles(
-            gray,
-            cv2.HOUGH_GRADIENT,
-            dp=1.2,
-            minDist=20,
-            param1=50,
-            param2=100,
-            minRadius=50,
-            maxRadius=100
-        )
-
-        results = []
-        if circles is not None:
-            circles = np.round(circles[0, :]).astype("int")
-            
-            for i, (x, y, r) in enumerate(circles):
-                # Crop region around circle with padding
-                top = max(y - r - 20, 0)
-                bottom = min(y + r + 20, img.shape[0])
-                left = max(x - r - 20, 0)
-                right = min(x + r + 20, img.shape[1])
-                crop = img[top:bottom, left:right]
-
-                try:
-                    ocr_result = reader.readtext(crop)
-                    texts = [res[1].strip() for res in ocr_result]  
-                except Exception as e:
-                    print(f"OCR error for circle {i}: {e}")
-                    texts = []
-
-                # Extract structured info
-                page_number, circle_text = "", ""
-                for t in texts:
-                    t_clean = t.strip()
-                    
-                    if re.match(r"^a\d+\.\d+$", t_clean, re.IGNORECASE):
-                        page_number = t_clean
-                    
-                    elif re.match(r"^\d+$", t_clean):
-                        circle_text = t_clean
-
-                results.append({
-                    "id": i + 1,
-                    "x": int(x),
-                    "y": int(y),
-                    "r": int(r),
-                    "page_number": page_number,
-                    "circle_text": circle_text,
-                    "raw_texts": texts 
-                })
-
-        return results
-    
-    except Exception as e:
-        print(f"Circle detection error: {e}")
-        return []
-
-
-def detect_text_from_image_bytes(image_bytes):
-    """
-    Detects text regions from the entire image, excluding numeric-only text and 
-    strings with quotes.
-
-    Steps:
-    1. Convert image bytes to an OpenCV image.
-    2. Run EasyOCR to detect text with bounding boxes.
-    3. Skip text if it:
-        - Contains quotes (single/double).
-        - Contains any digits.
-    4. Collect bounding box coordinates and the cleaned text.
-
-    Returns:
-        List of dictionaries containing:
-        - id (int): Text index
-        - x1, y1, x2, y2 (int): Bounding box coordinates
-        - text (str): Extracted text string
-    """
-    try:
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        if img is None:
-            print("Failed to decode image for text detection")
-            return []
-
-        results = reader.readtext(img)
-        text_boxes = []
-
-        for i, (bbox, text, confidence) in enumerate(results):
-            # Skip text containing quotes or numbers
-            if "'" in text or '"' in text:
-                continue 
-
-            if any(char.isdigit() for char in text):
-                continue
-         
-            try:
-                # Extract bounding box coordinates
-                x_coords = [point[0] for point in bbox]
-                y_coords = [point[1] for point in bbox]
-                
-                x1, x2 = int(min(x_coords)), int(max(x_coords))
-                y1, y2 = int(min(y_coords)), int(max(y_coords))
-
-                text_boxes.append({
-                    "id": i + 1,
-                    "x1": x1,
-                    "y1": y1,
-                    "x2": x2,
-                    "y2": y2,
-                    "text": text.strip()
-                })
-            except Exception as e:
-                print(f"Error processing text box {i}: {e}")
-                continue
-
-        return text_boxes
-    
-    except Exception as e:
-        print(f"Text detection error: {e}")
-        return []
-
-
 @router.post("/")
-async def detect_circles(file: UploadFile = File(...)):
+async def detect_route(
+    file: Optional[UploadFile] = File(None),
+    circles_only: bool = Form(False),
+    page_session_id: Optional[str] = Form(None),
+    page_label: str = Form(""),
+    server_image_path: Optional[str] = Form(None),
+):
     """
-    FastAPI endpoint to detect circles and text from an uploaded image.
+    Detect circles and text from an image.
 
-    Steps:
-    1. Accepts an image file via POST request.
-    2. Reads image bytes.
-    3. Runs circle detection (with OCR inside circles).
-    4. Runs general text detection across the entire image.
-    5. Returns results as a JSON response containing:
-        - circles: List of detected circles with text info
-        - texts: List of detected text regions outside circles
+    Priority for image source:
+    1. Cache (if page_session_id + page_label provided and context was already built)
+    2. server_image_path (backend reads /images/*.png directly from disk — no upload needed)
+    3. Uploaded file (fallback)
     """
     try:
-        image_bytes = await file.read()    
-        circles_with_text = detect_circles_with_text_from_image_bytes(image_bytes)
-        texts = detect_text_from_image_bytes(image_bytes)
-        
-        return {"circles": circles_with_text, "texts": texts}
-    
+        image_bytes = None
+
+        # 1. Cache hit
+        if page_session_id is not None:
+            image_bytes = img_get(cache_key(page_session_id, page_label))
+            if image_bytes:
+                print(f"[detect] Cache hit for session={page_session_id[:8]} label={page_label!r}")
+
+        # 2. Server-side disk read
+        if image_bytes is None and server_image_path:
+            image_bytes = resolve_server_path(server_image_path)
+            if image_bytes:
+                print(f"[detect] Read {len(image_bytes)//1024}KB from disk: {server_image_path}")
+                if page_session_id:
+                    img_store(cache_key(page_session_id, page_label), image_bytes)
+
+        # 3. Uploaded file
+        if image_bytes is None:
+            if file is None:
+                return {"error": "No image provided", "circles": [], "texts": []}
+            image_bytes = await file.read()
+            if page_session_id:
+                img_store(cache_key(page_session_id, page_label), image_bytes)
+
+        if circles_only:
+            circles = await asyncio.to_thread(detect_circles_from_bytes, image_bytes)
+            texts = []
+        else:
+            circles_task = asyncio.to_thread(detect_circles_from_bytes, image_bytes)
+            texts_task   = asyncio.to_thread(detect_text_from_bytes, image_bytes)
+            circles, texts = await asyncio.gather(circles_task, texts_task)
+
+        return {
+            "circles": circles,
+            "texts": texts
+        }
+
     except Exception as e:
-        print(f"Detection endpoint error: {e}")
+        print(f"[detect route] Endpoint error: {e}")
         return {"error": str(e), "circles": [], "texts": []}
